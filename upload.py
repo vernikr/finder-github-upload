@@ -70,7 +70,7 @@ def save_auth(settings):
 def choose(title, options):
     """Use arrow keys on a terminal; fall back to a numbered prompt otherwise."""
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        print(title)
+        print('\n' + title)
         for i, option in enumerate(options, 1): print(f'  {i}. {option}')
         while True:
             value = input('Номер [1]: ').strip()
@@ -81,10 +81,15 @@ def choose(title, options):
     fd = sys.stdin.fileno()
     previous = termios.tcgetattr(fd)
     selected = 0
-    print(title + ' (↑/↓, Enter)')
+    color = sys.stdout.isatty() and os.environ.get('TERM', '') != 'dumb' and 'NO_COLOR' not in os.environ
+    bold = '\x1b[1m' if color else ''
+    cyan = '\x1b[1;36m' if color else ''
+    reset = '\x1b[0m' if color else ''
+    print('\n' + bold + title + reset + ' (↑/↓, Enter)')
     def render():
         for i, label in enumerate(options):
-            print('\r\x1b[2K' + ('❯ ' if i == selected else '  ') + label)
+            highlighted = cyan + '❯ ' + label + reset if i == selected else '  ' + label
+            print('\r\x1b[2K' + highlighted)
         sys.stdout.flush()
     try:
         tty.setcbreak(fd)
@@ -106,6 +111,7 @@ def choose(title, options):
                 render()
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, previous)
+        print()
 
 def setup():
     choice = choose('Выберите способ входа', ['Через браузер с GitHub CLI (рекомендуется)', 'Ввести персональный токен (PAT)'])

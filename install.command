@@ -47,7 +47,7 @@ ln -sf "$python" "$base/python"
 cp upload.py launch.sh gh_install.py "$base/"
 chmod 700 "$base/launch.sh"
 "$base/python" workflow.py
-/System/Library/CoreServices/pbs -update || true
+"$base/python" register_finder.py || echo "Действие установлено, но может потребоваться включить его в настройках Finder вручную."
 printf '\nНастройка доступа к GitHub:\n'
 "$base/python" "$base/upload.py" setup
 printf '\nГотово. В Finder выделите файлы → правый клик → Быстрые действия → GitHub Upload.\n'
