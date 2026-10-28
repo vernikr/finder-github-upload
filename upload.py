@@ -67,10 +67,49 @@ def save_auth(settings):
     finally:
         if os.path.exists(name): os.unlink(name)
 
+def choose(title, options):
+    """Use arrow keys on a terminal; fall back to a numbered prompt otherwise."""
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print(title)
+        for i, option in enumerate(options, 1): print(f'  {i}. {option}')
+        while True:
+            value = input('Номер [1]: ').strip()
+            if not value: return 0
+            if value.isdigit() and 1 <= int(value) <= len(options): return int(value) - 1
+            print('Введите номер из списка.')
+    import select, termios, tty
+    fd = sys.stdin.fileno()
+    previous = termios.tcgetattr(fd)
+    selected = 0
+    print(title + ' (↑/↓, Enter)')
+    def render():
+        for i, label in enumerate(options):
+            print('\r\x1b[2K' + ('❯ ' if i == selected else '  ') + label)
+        sys.stdout.flush()
+    try:
+        tty.setcbreak(fd)
+        render()
+        while True:
+            key = os.read(fd, 1)
+            if not key: raise EOFError('Поток ввода закрыт')
+            if key in (b'\r', b'\n'):
+                return selected
+            if key == b'\x1b':
+                sequence = b''
+                for _ in range(2):
+                    if not select.select([fd], [], [], 0.1)[0]: break
+                    sequence += os.read(fd, 1)
+                if sequence in (b'[A', b'OA'): selected = (selected - 1) % len(options)
+                elif sequence in (b'[B', b'OB'): selected = (selected + 1) % len(options)
+                else: continue
+                sys.stdout.write(f'\x1b[{len(options)}A')
+                render()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, previous)
+
 def setup():
-    print('Выберите способ входа:\n  1. Через браузер с GitHub CLI (рекомендуется)\n  2. Ввести персональный токен (PAT)')
-    choice = input('Ваш выбор [1]: ').strip()
-    if choice in ('', '1'):
+    choice = choose('Выберите способ входа', ['Через браузер с GitHub CLI (рекомендуется)', 'Ввести персональный токен (PAT)'])
+    if choice == 0:
         try:
             gh = gh_install.find_or_install(app_dir())
         except (OSError, RuntimeError, ValueError, KeyError, urllib.error.URLError) as e:
@@ -78,17 +117,17 @@ def setup():
         gh = str(pathlib.Path(gh).resolve())
         try:
             token = gh_token(gh)
-            use_existing = input('GitHub CLI уже авторизован. Использовать текущую учётную запись? [Y/n] ').strip().lower()
+            use_existing = choose('GitHub CLI уже авторизован', ['Использовать текущую учётную запись', 'Войти в другую учётную запись']) == 0
         except UploadError:
             token = None
-            use_existing = 'n'
-        if use_existing not in ('', 'y', 'yes', 'д', 'да'):
+            use_existing = False
+        if not use_existing:
             print('GitHub покажет одноразовый код. Откройте страницу в браузере и подтвердите доступ.', flush=True)
             p = subprocess.run([gh, 'auth', 'login', '--hostname', 'github.com', '--web', '--git-protocol', 'https'], env=gh_env())
             if p.returncode: raise UploadError('Вход через GitHub CLI не завершён.')
             token = gh_token(gh)
         settings = {'method': 'gh', 'gh': gh}
-    elif choice == '2':
+    elif choice == 1:
         print('Создайте fine-grained PAT с доступом к uploads и Contents: Read and write.')
         token = getpass.getpass('Вставьте токен (ввод не отображается): ').strip()
         if not token: raise UploadError('Пустой токен.')
@@ -102,9 +141,7 @@ def setup():
             api(token, 'GET', '/git/ref/heads/' + urllib.parse.quote(repo['default_branch'], safe='/'))
         except UploadError as e:
             if 'HTTP 404' not in str(e) and 'HTTP 409' not in str(e): raise
-            print('Репозиторий пуст: для работы GitHub API нужно создать первый коммит с README.md.')
-            if input('Создать README.md в корне uploads? [y/N] ').strip().lower() not in ('y', 'yes', 'д', 'да'):
-                raise UploadError('Инициализация отменена. Создайте первый коммит вручную и повторите установку.')
+            print('Репозиторий пуст. Автоматически создаём первый коммит с README.md…')
             api(token, 'PUT', '/contents/README.md', {'message': 'Initialize uploads repository', 'content': base64.b64encode(b'# Uploads\n\nFiles uploaded from Finder.\n').decode('ascii')})
             print('Первый коммит создан.')
     if settings['method'] == 'pat':
@@ -183,7 +220,10 @@ def main():
             finally: pathlib.Path(name).unlink(missing_ok=True)
             run(paths)
         else: run(sys.argv[1:])
-    except (UploadError, OSError, KeyError, ValueError) as e:
+    except KeyboardInterrupt:
+        print('\nОтменено пользователем.', file=sys.stderr)
+        sys.exit(130)
+    except (UploadError, OSError, KeyError, ValueError, EOFError) as e:
         print('\nОшибка: ' + str(e), file=sys.stderr)
         sys.exit(1)
 

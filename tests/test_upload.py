@@ -68,3 +68,36 @@ class AuthTests(unittest.TestCase):
             with patch.object(upload, 'app_dir', return_value=pathlib.Path(temp)), \
                  patch.object(upload.subprocess, 'run', return_value=Mock(returncode=0, stdout='old-token\n')):
                 self.assertEqual(upload.token_get(), 'old-token')
+
+class InitializationTests(unittest.TestCase):
+    def test_empty_repo_initialized_without_question(self):
+        from unittest.mock import patch
+        calls = []
+        def fake_api(token, method, path, data=None):
+            calls.append((method,path))
+            if path == '': return {'permissions': {'push': True}, 'size': 0, 'default_branch': 'main'}
+            if method == 'GET': raise upload.UploadError('GitHub HTTP 409: Git Repository is empty.')
+            if method == 'PUT': return {}
+            raise AssertionError((method,path))
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(upload, 'app_dir', return_value=pathlib.Path(tmp)), \
+                 patch.object(upload.gh_install, 'find_or_install', return_value='/usr/local/bin/gh'), \
+                 patch.object(upload, 'gh_token', return_value='t'), \
+                 patch.object(upload, 'api', side_effect=fake_api), \
+                 patch('builtins.input', side_effect=['1', '']):
+                upload.setup()
+        self.assertIn(('PUT', '/contents/README.md'), calls)
+
+    def test_nonempty_repo_is_not_initialized(self):
+        from unittest.mock import patch
+        calls=[]
+        def fake_api(token,method,path,data=None):
+            calls.append((method,path))
+            return {'permissions':{'push':True}, 'size': 5}
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(upload, 'app_dir', return_value=pathlib.Path(tmp)), \
+                 patch.object(upload.gh_install, 'find_or_install', return_value='/usr/local/bin/gh'), \
+                 patch.object(upload, 'gh_token', return_value='t'), \
+                 patch.object(upload, 'api', side_effect=fake_api), \
+                 patch('builtins.input', side_effect=['1','']): upload.setup()
+        self.assertEqual(calls,[('GET','')])
