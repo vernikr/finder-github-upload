@@ -44,8 +44,8 @@ fi
 printf 'Используется Python: %s\n' "$python"
 "$python" --version
 ln -sf "$python" "$base/python"
-cp upload.py launch.sh gh_install.py "$base/"
-chmod 700 "$base/launch.sh"
+cp upload.py launch.sh terminal.sh gh_install.py "$base/"
+chmod 700 "$base/launch.sh" "$base/terminal.sh"
 "$base/python" workflow.py
 "$base/python" register_finder.py || echo "Действие установлено, но может потребоваться включить его в настройках Finder вручную."
 printf '\nНастройка доступа к GitHub:\n'

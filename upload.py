@@ -190,7 +190,7 @@ def run(paths):
     branch = repo['default_branch']
     refpath = '/git/ref/heads/' + urllib.parse.quote(branch, safe='/')
     folder = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d_%H-%M-%S') + '-' + secrets.token_hex(4)
-    print(f'Папка: {folder}\nФайлов: {len(items)}. Содержимое загружается в {OWNER}/{REPO}.', flush=True)
+    print(f'Файлов: {len(items)}. Содержимое загружается в {OWNER}/{REPO}.', flush=True)
     entries = []
     for i, (path, rel) in enumerate(items, 1):
         data = path.read_bytes()
@@ -214,7 +214,7 @@ def run(paths):
     print('\nГотово: ' + url, flush=True)
     try:
         subprocess.run(['/usr/bin/pbcopy'], input=url.encode(), check=True)
-        subprocess.run(['/usr/bin/osascript', '-e', 'on run argv\ndisplay dialog ("Ссылка скопирована в буфер:\n" & item 1 of argv) buttons {"OK"} default button "OK" with title "GitHub Upload"\nend run', url], check=False)
+        subprocess.run(['/usr/bin/osascript', '-e', 'on run argv\ndisplay dialog ("Ссылка скопирована в буфер:\n" & item 1 of argv) buttons {"OK"} default button "OK" with title "GitHub Upload"\nend run', url], check=False, stdout=subprocess.DEVNULL)
     except OSError: print('Не удалось скопировать ссылку; скопируйте её из строки выше.')
 
 def main():
