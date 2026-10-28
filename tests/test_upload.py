@@ -101,3 +101,19 @@ class InitializationTests(unittest.TestCase):
                  patch.object(upload, 'api', side_effect=fake_api), \
                  patch('builtins.input', side_effect=['1','']): upload.setup()
         self.assertEqual(calls,[('GET','')])
+
+class BundledGhTests(unittest.TestCase):
+    def test_gh_is_recorded_relocatably(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as temp:
+            base=pathlib.Path(temp)
+            with patch.object(upload, 'app_dir', return_value=base), \
+                 patch.object(upload.gh_install, 'find_or_install', return_value=str(base/'gh')), \
+                 patch.object(upload, 'gh_token', return_value='secret'), \
+                 patch.object(upload, 'api', return_value={'permissions':{'push':True}, 'size': 1}), \
+                 patch('builtins.input', side_effect=['1','']): upload.setup()
+            auth=upload.json.loads((base/'auth.json').read_text())
+            self.assertEqual(auth['gh'], ':bundled:')
+            with patch.object(upload, 'app_dir', return_value=base), patch.object(upload, 'gh_token', return_value='t') as token:
+                self.assertEqual(upload.token_get(),'t')
+                token.assert_called_once_with(str(base/'gh'))

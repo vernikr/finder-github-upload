@@ -5,7 +5,7 @@ job=$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/github-upload.XXXXXXXX")
 selection="$job/selection"
 finished="$job/finished"
 printf '%s\0' "$@" > "$selection"
-base="$HOME/.local/share/finder-github-upload"
+base="$(cd "$(dirname "$0")" && pwd -P)"
 # Quote arbitrary path names for Terminal's configured login shell.
 command="exec /bin/bash $(printf '%q' "$base/terminal.sh") $(printf '%q' "$selection") $(printf '%q' "$finished")"
 # Keep a controller alive in the background so only the window we opened closes;

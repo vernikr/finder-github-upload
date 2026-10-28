@@ -25,7 +25,7 @@ def api(token, method, path, data=None):
     except urllib.error.URLError as e: raise UploadError(f'Сетевая ошибка: {e.reason}') from None
 
 def app_dir():
-    return pathlib.Path.home() / '.local/share/finder-github-upload'
+    return pathlib.Path(__file__).resolve().parent
 
 def gh_env():
     env = os.environ.copy()
@@ -47,7 +47,9 @@ def token_get():
     if config.exists():
         try:
             auth = json.loads(config.read_text())
-            if auth.get('method') == 'gh': return gh_token(auth['gh'])
+            if auth.get('method') == 'gh':
+                gh = auth['gh']
+                return gh_token(str(app_dir() / 'gh') if gh == ':bundled:' else gh)
             if auth.get('method') != 'pat': raise UploadError('Неизвестный способ авторизации. Повторите установку.')
         except (ValueError, KeyError) as e:
             raise UploadError(f'Ошибка настроек авторизации: {e}. Повторите установку.') from None
@@ -132,7 +134,7 @@ def setup():
             p = subprocess.run([gh, 'auth', 'login', '--hostname', 'github.com', '--web', '--git-protocol', 'https'], env=gh_env())
             if p.returncode: raise UploadError('Вход через GitHub CLI не завершён.')
             token = gh_token(gh)
-        settings = {'method': 'gh', 'gh': gh}
+        settings = {'method': 'gh', 'gh': ':bundled:' if pathlib.Path(gh) == (app_dir() / 'gh').resolve() else gh}
     elif choice == 1:
         print('Создайте fine-grained PAT с доступом к uploads и Contents: Read and write.')
         token = getpass.getpass('Вставьте токен (ввод не отображается): ').strip()

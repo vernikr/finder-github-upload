@@ -3,10 +3,10 @@
 set -u
 selection=$1
 finished=$2
-base="$HOME/.local/share/finder-github-upload"
+base="$(cd "$(dirname "$0")" && pwd -P)"
 # Clear only this window's visible screen; don't erase the user's scrollback.
 printf '\033[2J\033[H'
-"$base/python" -u "$base/upload.py" --selection-file "$selection"
+PYTHONDONTWRITEBYTECODE=1 "$base/python" -u "$base/upload.py" --selection-file "$selection"
 printf '\nНажмите Enter, чтобы закрыть окно… '
 IFS= read -r || true
 : > "$finished"

@@ -16,7 +16,7 @@ def update_preferences(data):
         modes.update(ContextMenu=True, FinderPreview=True, ServicesMenu=True)
     return data
 
-def register():
+def register(backup_dir):
     result = subprocess.run(['/usr/bin/defaults', 'export', 'pbs', '-'], capture_output=True)
     if result.returncode:
         message = result.stderr.decode(errors='replace')
@@ -29,7 +29,7 @@ def register():
         data = plistlib.loads(old)
         if not isinstance(data, dict): raise ValueError('Неожиданный формат настроек pbs')
     update_preferences(data)
-    backup_dir = pathlib.Path.home()/'.local/share/finder-github-upload'
+    backup_dir = pathlib.Path(backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     backup = backup_dir/f'pbs-backup-{stamp}.plist'
@@ -43,7 +43,9 @@ def register():
     print('Если действие не видно, в Finder нажмите правой кнопкой на файл → Быстрые действия; при необходимости перезапустите Finder.')
 
 if __name__ == '__main__':
-    try: register()
+    try:
+        if len(sys.argv) != 2: raise ValueError('Укажите каталог для резервной копии')
+        register(sys.argv[1])
     except (OSError, ValueError, plistlib.InvalidFileException, RuntimeError) as e:
         print('Не удалось автоматически включить действие для Finder:', e, file=sys.stderr)
         print('Включите GitHub Upload вручную в настройках Быстрых действий или Services.', file=sys.stderr)

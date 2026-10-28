@@ -29,7 +29,7 @@ class FinderRegistrationTests(unittest.TestCase):
             if args[1] == 'export': return Mock(returncode=0,stdout=old,stderr=b'')
             return Mock(returncode=0,stdout=b'',stderr=b'')
         with tempfile.TemporaryDirectory() as tmp, patch.object(reg.pathlib.Path, 'home', return_value=pathlib.Path(tmp)), patch.object(reg.subprocess,'run',side_effect=fake_run):
-            reg.register()
+            reg.register(pathlib.Path(tmp)/"backup")
             backups=list(pathlib.Path(tmp).rglob('pbs-backup-*.plist'))
             self.assertEqual(len(backups),1)
             self.assertEqual(backups[0].read_bytes(),old)
