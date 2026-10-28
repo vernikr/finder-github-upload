@@ -15,7 +15,10 @@ if [ -z "$uv" ]; then
   /bin/sh "$installer"
   rm -f "$installer"
   trap - EXIT
-  uv="$HOME/.local/bin/uv"
+  for candidate in "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv"; do
+    if [ -x "$candidate" ]; then uv="$candidate"; break; fi
+  done
+  if [ -z "$uv" ]; then echo "uv установлен, но его исполняемый файл не найден. Проверьте вывод установщика."; exit 1; fi
 fi
 "$uv" python install 3.12
 python="$("$uv" python find 3.12)"
