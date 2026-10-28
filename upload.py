@@ -34,6 +34,16 @@ def setup():
     if not token: raise UploadError('Пустой токен.')
     repo = api(token, 'GET', '')
     if not repo.get('permissions', {}).get('push'): raise UploadError('Токен не имеет права записи в uploads.')
+    if repo.get('size') == 0:
+        try:
+            api(token, 'GET', '/git/ref/heads/' + urllib.parse.quote(repo['default_branch'], safe='/'))
+        except UploadError as e:
+            if 'HTTP 404' not in str(e) and 'HTTP 409' not in str(e): raise
+            print('Репозиторий пуст: для работы GitHub API нужно создать первый коммит с README.md.')
+            if input('Создать README.md в корне uploads? [y/N] ').strip().lower() not in ('y', 'yes', 'д', 'да'):
+                raise UploadError('Инициализация отменена. Создайте первый коммит вручную и повторите установку.')
+            api(token, 'PUT', '/contents/README.md', {'message': 'Initialize uploads repository', 'content': base64.b64encode(b'# Uploads\n\nFiles uploaded from Finder.\n').decode('ascii')})
+            print('Первый коммит создан.')
     # The security command receives the password briefly as an argument.
     p = subprocess.run(['/usr/bin/security', 'add-generic-password', '-U', '-s', SERVICE, '-a', OWNER, '-w', token], capture_output=True, text=True)
     if p.returncode: raise UploadError('Не удалось сохранить токен в Keychain: ' + p.stderr.strip())
