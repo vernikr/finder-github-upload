@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Finder GitHub Upload: one atomic commit per selection."""
 import base64, datetime, getpass, json, os, pathlib, secrets, subprocess, sys, urllib.error, urllib.parse, urllib.request
+import gh_install
 
 OWNER = 'vernikr-personal'
 REPO = 'uploads'
@@ -23,15 +24,77 @@ def api(token, method, path, data=None):
         raise UploadError(f'GitHub HTTP {e.code}: {message}') from None
     except urllib.error.URLError as e: raise UploadError(f'Сетевая ошибка: {e.reason}') from None
 
+def app_dir():
+    return pathlib.Path.home() / '.local/share/finder-github-upload'
+
+def gh_env():
+    env = os.environ.copy()
+    for key in ('GH_TOKEN', 'GITHUB_TOKEN', 'GH_HOST'):
+        env.pop(key, None)
+    return env
+
+def gh_token(gh):
+    try:
+        p = subprocess.run([gh, 'auth', 'token', '--hostname', 'github.com'], text=True, capture_output=True, env=gh_env())
+    except OSError as e:
+        raise UploadError(f'Не удалось запустить GitHub CLI: {e}. Повторите установку.') from None
+    if p.returncode or not p.stdout.strip():
+        raise UploadError('GitHub CLI не авторизован. Запустите установщик снова и войдите через браузер.')
+    return p.stdout.strip()
+
 def token_get():
+    config = app_dir() / 'auth.json'
+    if config.exists():
+        try:
+            auth = json.loads(config.read_text())
+            if auth.get('method') == 'gh': return gh_token(auth['gh'])
+            if auth.get('method') != 'pat': raise UploadError('Неизвестный способ авторизации. Повторите установку.')
+        except (ValueError, KeyError) as e:
+            raise UploadError(f'Ошибка настроек авторизации: {e}. Повторите установку.') from None
+    # Also supports installations made before browser login was introduced.
     p = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s', SERVICE, '-a', OWNER, '-w'], text=True, capture_output=True)
-    if p.returncode: raise UploadError('Токен не найден в Keychain. Запустите install.command и настройте токен.')
+    if p.returncode: raise UploadError('Токен не найден в Keychain. Запустите install.command и настройте вход.')
     return p.stdout.rstrip('\n')
 
+def save_auth(settings):
+    target = app_dir() / 'auth.json'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    import tempfile
+    fd, name = tempfile.mkstemp(prefix='.auth-', dir=target.parent)
+    try:
+        with os.fdopen(fd, 'w') as f: json.dump(settings, f)
+        os.replace(name, target)
+    finally:
+        if os.path.exists(name): os.unlink(name)
+
 def setup():
-    print('Создайте fine-grained PAT с доступом к репозиторию uploads и Contents: Read and write.')
-    token = getpass.getpass('Вставьте токен (ввод не отображается): ').strip()
-    if not token: raise UploadError('Пустой токен.')
+    print('Выберите способ входа:\n  1. Через браузер с GitHub CLI (рекомендуется)\n  2. Ввести персональный токен (PAT)')
+    choice = input('Ваш выбор [1]: ').strip()
+    if choice in ('', '1'):
+        try:
+            gh = gh_install.find_or_install(app_dir())
+        except (OSError, RuntimeError, ValueError, KeyError, urllib.error.URLError) as e:
+            raise UploadError(f'Не удалось установить GitHub CLI: {e}') from None
+        gh = str(pathlib.Path(gh).resolve())
+        try:
+            token = gh_token(gh)
+            use_existing = input('GitHub CLI уже авторизован. Использовать текущую учётную запись? [Y/n] ').strip().lower()
+        except UploadError:
+            token = None
+            use_existing = 'n'
+        if use_existing not in ('', 'y', 'yes', 'д', 'да'):
+            print('GitHub покажет одноразовый код. Откройте страницу в браузере и подтвердите доступ.', flush=True)
+            p = subprocess.run([gh, 'auth', 'login', '--hostname', 'github.com', '--web', '--git-protocol', 'https'], env=gh_env())
+            if p.returncode: raise UploadError('Вход через GitHub CLI не завершён.')
+            token = gh_token(gh)
+        settings = {'method': 'gh', 'gh': gh}
+    elif choice == '2':
+        print('Создайте fine-grained PAT с доступом к uploads и Contents: Read and write.')
+        token = getpass.getpass('Вставьте токен (ввод не отображается): ').strip()
+        if not token: raise UploadError('Пустой токен.')
+        settings = {'method': 'pat'}
+    else:
+        raise UploadError('Неизвестный способ входа.')
     repo = api(token, 'GET', '')
     if not repo.get('permissions', {}).get('push'): raise UploadError('Токен не имеет права записи в uploads.')
     if repo.get('size') == 0:
@@ -44,10 +107,12 @@ def setup():
                 raise UploadError('Инициализация отменена. Создайте первый коммит вручную и повторите установку.')
             api(token, 'PUT', '/contents/README.md', {'message': 'Initialize uploads repository', 'content': base64.b64encode(b'# Uploads\n\nFiles uploaded from Finder.\n').decode('ascii')})
             print('Первый коммит создан.')
-    # The security command receives the password briefly as an argument.
-    p = subprocess.run(['/usr/bin/security', 'add-generic-password', '-U', '-s', SERVICE, '-a', OWNER, '-w', token], capture_output=True, text=True)
-    if p.returncode: raise UploadError('Не удалось сохранить токен в Keychain: ' + p.stderr.strip())
-    print('Токен проверен и сохранён в Связке ключей.')
+    if settings['method'] == 'pat':
+        # The security command receives the password briefly as an argument.
+        p = subprocess.run(['/usr/bin/security', 'add-generic-password', '-U', '-s', SERVICE, '-a', OWNER, '-w', token], capture_output=True, text=True)
+        if p.returncode: raise UploadError('Не удалось сохранить токен в Keychain: ' + p.stderr.strip())
+    save_auth(settings)
+    print('Доступ к репозиторию проверен и настройка сохранена.')
 
 def collect(paths):
     selected = []

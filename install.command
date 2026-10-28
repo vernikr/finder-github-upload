@@ -1,5 +1,19 @@
 #!/bin/bash
 set -eu
+finish() {
+  status=$?
+  trap - EXIT
+  if [ -n "${installer:-}" ]; then rm -f "$installer"; fi
+  if [ "$status" -ne 0 ]; then
+    printf '\nУстановка завершилась с ошибкой (код %s). Прочитайте сообщение выше.\n' "$status"
+  fi
+  if [ -t 0 ]; then
+    printf '\nНажмите Enter, чтобы закрыть окно… '
+    read -r || true
+  fi
+  exit "$status"
+}
+trap finish EXIT
 cd "$(dirname "$0")"
 if [ "$(uname -s)" != Darwin ]; then echo 'Требуется macOS.'; exit 1; fi
 base="$HOME/.local/share/finder-github-upload"
@@ -15,11 +29,9 @@ if [ -z "$python" ]; then
   if [ -z "$uv" ]; then
     echo 'Подходящий Python не найден. Устанавливаем uv официальным установщиком astral.sh…'
     installer="$(/usr/bin/mktemp)"
-    trap 'rm -f "$installer"' EXIT
     /usr/bin/curl -LsSf https://astral.sh/uv/install.sh -o "$installer"
     /bin/sh "$installer"
     rm -f "$installer"
-    trap - EXIT
     for candidate in "$HOME/.local/bin/uv" "$HOME/.cargo/bin/uv"; do
       if [ -x "$candidate" ]; then uv="$candidate"; break; fi
     done
@@ -32,11 +44,10 @@ fi
 printf 'Используется Python: %s\n' "$python"
 "$python" --version
 ln -sf "$python" "$base/python"
-cp upload.py launch.sh "$base/"
+cp upload.py launch.sh gh_install.py "$base/"
 chmod 700 "$base/launch.sh"
 "$base/python" workflow.py
 /System/Library/CoreServices/pbs -update || true
 printf '\nНастройка доступа к GitHub:\n'
 "$base/python" "$base/upload.py" setup
 printf '\nГотово. В Finder выделите файлы → правый клик → Быстрые действия → GitHub Upload.\n'
-read -r -p 'Нажмите Enter для выхода…' || true

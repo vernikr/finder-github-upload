@@ -42,3 +42,29 @@ class GitTests(unittest.TestCase):
         self.assertEqual(tree['base_tree'],'base')
         self.assertTrue(tree['tree'][0]['path'].endswith('/dir/a.txt'))
         self.assertEqual(sum(method=='PATCH' for method,path,data in calls), 1)
+
+class AuthTests(unittest.TestCase):
+    def test_browser_setup_saves_method_not_token(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(upload, 'app_dir', return_value=pathlib.Path(temp)), \
+                 patch.object(upload.gh_install, 'find_or_install', return_value='/usr/local/bin/gh'), \
+                 patch.object(upload, 'gh_token', return_value='secret-token'), \
+                 patch.object(upload, 'api', return_value={'permissions': {'push': True}, 'size': 1}), \
+                 patch('builtins.input', side_effect=['1', '']):
+                upload.setup()
+            config = (pathlib.Path(temp) / 'auth.json').read_text()
+            self.assertNotIn('secret-token', config)
+            self.assertEqual(upload.json.loads(config)['method'], 'gh')
+
+    def test_gh_missing_is_readable_error(self):
+        from unittest.mock import patch
+        with patch.object(upload.subprocess, 'run', side_effect=FileNotFoundError('missing')):
+            with self.assertRaises(upload.UploadError): upload.gh_token('/missing/gh')
+
+    def test_no_config_uses_old_keychain(self):
+        from unittest.mock import patch, Mock
+        with tempfile.TemporaryDirectory() as temp:
+            with patch.object(upload, 'app_dir', return_value=pathlib.Path(temp)), \
+                 patch.object(upload.subprocess, 'run', return_value=Mock(returncode=0, stdout='old-token\n')):
+                self.assertEqual(upload.token_get(), 'old-token')
