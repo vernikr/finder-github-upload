@@ -2,6 +2,7 @@
 """Finder GitHub Upload: one atomic commit per selection."""
 import base64, datetime, getpass, json, os, pathlib, secrets, subprocess, sys, urllib.error, urllib.parse, urllib.request
 import gh_install
+from image_compression import compress_image
 
 OWNER = 'vernikr-personal'
 REPO = 'uploads'
@@ -197,6 +198,8 @@ def run(paths):
     for i, (path, rel) in enumerate(items, 1):
         data = path.read_bytes()
         if len(data) > LIMIT: raise UploadError(f'Файл стал больше 50 МиБ: {path}')
+        data, compression_note = compress_image(data)
+        if compression_note: print(f'  {rel}: {compression_note}', flush=True)
         blob = api(token, 'POST', '/git/blobs', {'content': base64.b64encode(data).decode('ascii'), 'encoding': 'base64'})
         entries.append({'path': folder + '/' + rel, 'mode': '100644', 'type': 'blob', 'sha': blob['sha']})
         print(f'\r[{i}/{len(items)}] {i*100//len(items):3}%  {rel}', flush=True)

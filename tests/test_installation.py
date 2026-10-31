@@ -6,7 +6,7 @@ class InstallerTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.home=pathlib.Path(self.tmp.name)/'home'; self.home.mkdir()
         self.source=pathlib.Path(self.tmp.name)/'download'; self.source.mkdir()
-        for filename in ('install.command','find-python.sh','workflow.py','upload.py','launch.sh','terminal.sh','gh_install.py','register_finder.py','uninstall.command'):
+        for filename in ('install.command','find-python.sh','workflow.py','upload.py','image_compression.py','launch.sh','terminal.sh','gh_install.py','register_finder.py','uninstall.command'):
             shutil.copy2(ROOT/filename,self.source/filename)
         binpath=self.home/'.local/bin';binpath.mkdir(parents=True)
         uname=binpath/'uname';uname.write_text('#!/bin/sh\necho Darwin\n');uname.chmod(0o755)
@@ -14,6 +14,7 @@ class InstallerTests(unittest.TestCase):
         python.write_text('''#!/bin/sh
 case "$1" in
  -c) exit 0 ;;
+ -m) if [ "$2" = venv ]; then mkdir -p "$3/bin"; printf '#!/bin/sh\nexit 0\n' > "$3/bin/python"; chmod +x "$3/bin/python"; fi; exit 0 ;;
  --version) echo 'Python 3.13 mock'; exit 0 ;;
  workflow.py) mkdir -p "$2/Contents"; printf mock > "$2/Contents/document.wflow"; exit 0 ;;
  */upload.py) if [ "${FAIL_SETUP:-}" = 1 ]; then exit 1; fi; exit 0 ;;

@@ -54,7 +54,11 @@ staged="$work/GitHub Upload.workflow"
 base="$staged/Contents/Resources"
 mkdir -p "$base"
 ln -s "$python" "$base/python"
-cp upload.py launch.sh terminal.sh gh_install.py uninstall.command "$base/"
+cp upload.py image_compression.py launch.sh terminal.sh gh_install.py uninstall.command "$base/"
+# Isolated build environment; only Pillow is copied into the portable bundle.
+echo 'Устанавливаем Pillow для сжатия изображений…'
+"$python" -m venv "$work/deps"
+"$work/deps/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: --target "$base/vendor" 'Pillow==13.0.0'
 chmod 700 "$base/launch.sh" "$base/terminal.sh" "$base/uninstall.command"
 # Preserve a locally downloaded gh and the pbs backups from the prior installation.
 for previous in "$final/Contents/Resources" "$HOME/.local/share/finder-github-upload"; do
